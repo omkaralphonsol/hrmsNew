@@ -32,7 +32,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="BouncyCastle.Cryptography, Version=2.0.0.0, Culture=neutral, PublicKeyToken=072edcf4a5328938, processorArchitecture=MSIL">
-      <HintPath>..\packages\BouncyCastle.Cryptography.2.5.1\lib\net461\BouncyCastle.Cryptography.dll</HintPath>
+      <HintPath>..\packages\BouncyCastle.Cryptography.2.6.2\lib\net461\BouncyCastle.Cryptography.dll</HintPath>
     </Reference>
     <Reference Include="Google.Protobuf, Version=3.30.0.0, Culture=neutral, PublicKeyToken=a7d26565bac4d604, processorArchitecture=MSIL">
       <HintPath>..\packages\Google.Protobuf.3.30.0\lib\net45\Google.Protobuf.dll</HintPath>
@@ -99,8 +99,10 @@
     <Compile Include="Class1.cs" />
     <Compile Include="CommonBL.cs" />
     <Compile Include="DataClass.cs" />
+    <Compile Include="EmployeeOnboardingBL.cs" />
     <Compile Include="EmployeeLeaveBL.cs" />
     <Compile Include="HandoverprocessBL.cs" />
+    <Compile Include="HolidayListBL.cs" />
     <Compile Include="LoginBAL.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RoleDetailsBL.cs" />

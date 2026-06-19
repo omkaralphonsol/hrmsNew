@@ -22,6 +22,13 @@ namespace DataObject
         public DateTime? action_date { get; set; }
         public string reporting_manager_name { get; set; }
         public string project_status { get; set; }
+        public int pending_days { get; set; }
+        public string pending_days_display { get; set; }
+        public int pending_hours { get; set; }
+        public int approval_hours { get; set; }
+        public int approval_days { get; set; }
+        public int status_updated_flag { get; set; }
+        public string authority_status { get; set; }
 
         public string last_working_date_display { get; set; }
 

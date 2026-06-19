@@ -13,6 +13,9 @@ namespace HRMS.View.Modules
     {
         protected string UserId = null;
         public static List<UserDetailsDO> userDo = new List<UserDetailsDO>();
+
+        // This page is used for both User List and Employee List.
+        // When URL has ?flow=employee, show employee-specific data and UI.
         private bool IsEmployeeFlow
         {
             get
@@ -33,6 +36,12 @@ namespace HRMS.View.Modules
         protected void Page_Load(object sender, EventArgs e)
         {
             UserId = Convert.ToString(Session["userId"]);
+            if (IsEmployeeFlow)
+            {
+                Response.Redirect("~/view/modules/EmployeeList.aspx", false);
+                return;
+            }
+            ApplyFlowLabels();
             if (!IsPostBack)
             {
                 if (Session["userId"] == null)
@@ -42,7 +51,6 @@ namespace HRMS.View.Modules
                 }
                 Session["CurrentPageIndex"] = 0;
                 Session["AdvSearchResViewUser"] = null;
-                ApplyFlowLabels();
 
                 BindGridView();
                 BindUsername();
@@ -55,14 +63,55 @@ namespace HRMS.View.Modules
         {
             if (IsEmployeeFlow)
             {
+                litPageTitle.Text = "Employee List";
+                pageShell.Attributes["class"] = "employee-list-page";
+                pageHeader.Attributes["class"] = "employee-list-header";
+                pageToolbar.Attributes["class"] = "employee-list-toolbar";
+                listCard.Attributes["class"] = "employee-list-card";
+                employeeStatsGrid.Visible = true;
+                gridview.CssClass = "table employee-table custom-gridview";
                 btn_adduser.Attributes["title"] = "Add Employee";
-                btn_adduser.InnerHtml = "<i class=\"fas fa-user-plus\"></i>&nbsp;Add Employee";
+                btn_adduser.InnerHtml = "<i class=\"fas fa-plus\"></i> Add Employee";
+                btn_advanceserach.Attributes["class"] = "employee-toolbar-btn employee-btn-outline";
+                btn_adduser.Attributes["class"] = "employee-toolbar-btn employee-btn-primary";
+                btnBack1.CssClass = "employee-toolbar-btn employee-btn-outline";
+                Button1.CssClass = "employee-toolbar-btn employee-btn-primary";
+                Button7.CssClass = "employee-toolbar-btn employee-btn-outline";
+                Button8.CssClass = "employee-toolbar-btn employee-btn-outline";
             }
             else
             {
+                litPageTitle.Text = "User List";
+                pageShell.Attributes["class"] = "user-list-page page-container";
+                pageHeader.Attributes["class"] = "user-list-header";
+                pageToolbar.Attributes["class"] = "user-list-toolbar";
+                listCard.Attributes["class"] = "user-list-card";
+                employeeStatsGrid.Visible = false;
+                gridview.CssClass = "table table-bordered table-striped custom-gridview";
                 btn_adduser.Attributes["title"] = "Add User";
-                btn_adduser.InnerHtml = "<i class=\"fas fa-user-plus\"></i>&nbsp;Add User";
+                btn_adduser.InnerHtml = "<i class=\"fas fa-plus\"></i> Add User";
+                btn_advanceserach.Attributes["class"] = "btn btn-outline-primary";
+                btn_adduser.Attributes["class"] = "btn btn-primary";
+                btnBack1.CssClass = "btn btn-secondary";
+                Button1.CssClass = "btn btn-primary";
+                Button7.CssClass = "btn btn-outline-secondary";
+                Button8.CssClass = "btn btn-secondary";
             }
+        }
+
+        private void UpdateSummaryCards(List<UserDetailsDO> users)
+        {
+            users = users ?? new List<UserDetailsDO>();
+            int total = users.Count;
+            int active = users.Count(u => u.Isactive);
+            int probation = users.Count(u => u.probation_period_months > 0 || string.Equals(Convert.ToString(u.employee_type), "Probation", StringComparison.OrdinalIgnoreCase));
+            DateTime today = DateTime.Today;
+            int newJoiners = users.Count(u => u.date_of_joining != DateTime.MinValue && u.date_of_joining.Month == today.Month && u.date_of_joining.Year == today.Year);
+
+            litTotalEmployees.Text = total.ToString();
+            litActiveEmployees.Text = active.ToString();
+            litProbationEmployees.Text = probation.ToString();
+            litNewJoiners.Text = newJoiners.ToString();
         }
         public void BindUsername()
         {
@@ -163,11 +212,12 @@ namespace HRMS.View.Modules
 
                 UserDetailsBL userbl = new UserDetailsBL();
 
-                List<UserDetailsDO> userDo = userbl.AdvanceSearch(user);
-
-
+                List<UserDetailsDO> userDo = IsEmployeeFlow
+                    ? SearchCurrentEmployeeFlow(user)
+                    : userbl.AdvanceSearch(user);
 
                 userDo = userDo.OrderByDescending(t => t.UserId).ToList();
+                UpdateSummaryCards(userDo);
 
                 int totalRecords = userDo.Count;
                 int pageIndex = Convert.ToInt32(Session["CurrentPageIndex"] ?? 0);
@@ -226,6 +276,37 @@ namespace HRMS.View.Modules
 
             return string.IsNullOrWhiteSpace(value) ? null : value;
         }
+
+        private List<UserDetailsDO> SearchCurrentEmployeeFlow(UserDetailsDO criteria)
+        {
+            List<UserDetailsDO> users = GetUsersForCurrentFlow() ?? new List<UserDetailsDO>();
+
+            if (criteria == null)
+            {
+                return users;
+            }
+
+            if (criteria.empcodeId.HasValue)
+            {
+                users = users.Where(u => u.UserId == criteria.empcodeId.Value).ToList();
+            }
+
+            if (criteria.usernameId.HasValue)
+            {
+                users = users.Where(u => u.UserId == criteria.usernameId.Value).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(criteria.contact_detail))
+            {
+                string contact = criteria.contact_detail.Trim();
+                users = users
+                    .Where(u => !string.IsNullOrWhiteSpace(u.contact_detail) &&
+                                u.contact_detail.IndexOf(contact, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ToList();
+            }
+
+            return users;
+        }
         protected void AdvSearchFunction(object sender, EventArgs e)
         {
             try
@@ -236,8 +317,8 @@ namespace HRMS.View.Modules
                 Session["CurrentPageIndex"] = 0;
                 advancedSearchFields.Visible = true;
                 gridview.Visible = false;
-                btn_advanceserach.Attributes["class"] = "btn btn-dark ms-2 light-border";
-                btn_advanceserach.Style["color"] = "white";
+                btn_advanceserach.Attributes["class"] = IsEmployeeFlow ? "employee-toolbar-btn employee-btn-outline" : "btn btn-outline-primary";
+                btn_advanceserach.Style["color"] = string.Empty;
                 ddlPageSelector.Visible = false;
             }
 
@@ -258,8 +339,8 @@ namespace HRMS.View.Modules
                 gridview.Visible = true;
                 Session["AdvSearchResViewUser"] = null;
                 BindGridView();
-                btn_advanceserach.Attributes["class"] = "btn  btn-outline-dark ms-2 light-border";
-                btn_advanceserach.Style["color"] = "black";
+                btn_advanceserach.Attributes["class"] = IsEmployeeFlow ? "employee-toolbar-btn employee-btn-outline" : "btn btn-outline-primary";
+                btn_advanceserach.Style["color"] = string.Empty;
             }
 
             catch (Exception ex)
@@ -341,14 +422,7 @@ namespace HRMS.View.Modules
                     string[] args = Convert.ToString(e.CommandArgument).Split('|');
                     string userId = args.Length > 0 ? args[0] : "0";
                     string employeeCode = args.Length > 1 ? args[1] : string.Empty;
-                    if (IsEmployeeFlow)
-                    {
-                        Response.Redirect("AddEmployee.aspx?user_id=" + userId + "&emp_code=" + HttpUtility.UrlEncode(employeeCode) + "&mode=edit", false);
-                    }
-                    else
-                    {
-                        Response.Redirect("Adduser.aspx?user_id=" + userId + "&emp_code=" + HttpUtility.UrlEncode(employeeCode) + "&mode=edit", false);
-                    }
+                    Response.Redirect("Adduser.aspx?user_id=" + userId + "&emp_code=" + HttpUtility.UrlEncode(employeeCode) + "&mode=edit", false);
                 }
                 else if (e.CommandName == "deleteUser")
                 {
@@ -376,6 +450,7 @@ namespace HRMS.View.Modules
             {
                 UserDetailsBL userDetailsBL = new UserDetailsBL();
                 List<UserDetailsDO> users = GetUsersForCurrentFlow();
+                UpdateSummaryCards(users);
                 ApplySorting(ref users);
                 int totalRecords = users.Count;
 
@@ -567,14 +642,7 @@ namespace HRMS.View.Modules
         }
         protected void Button3_ServerClick(object sender, EventArgs e)
         {
-            if (IsEmployeeFlow)
-            {
-                Response.Redirect("~/view/modules/AddEmployee.aspx", false);
-            }
-            else
-            {
-                Response.Redirect("~/view/modules/Adduser.aspx", false);
-            }
+            Response.Redirect("~/view/modules/Adduser.aspx", false);
         }
      
         protected void confirmDeleteButton_Click(object sender, EventArgs e)

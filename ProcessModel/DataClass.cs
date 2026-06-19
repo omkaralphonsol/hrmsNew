@@ -142,6 +142,11 @@ namespace ProcessModel
         public List<T> getdatafromreder<T>(MySqlDataReader dr) where T : new()
         {
             List<T> list = new List<T>();
+            if (dr == null)
+            {
+                return list;
+            }
+
             try
             {
                 Type type = typeof(T);
@@ -188,15 +193,26 @@ namespace ProcessModel
             {
                 CommonBL log = new CommonBL();
                 log.insertlog("DataClass.cs", ee.Message, "list count", "Process End", "GetTaskDatabyId");
+                if (dr != null)
+                {
+                    dr.Close();
+                }
+            }
+            if (dr != null)
+            {
                 dr.Close();
             }
-            dr.Close();
             return list;
         }
 
         public List<T> getdatafromrederwithrepeat<T>(MySqlDataReader dr) where T : new()
         {
             List<T> list = new List<T>();
+            if (dr == null)
+            {
+                return list;
+            }
+
             try
             {
                 Type type = typeof(T);
@@ -237,7 +253,10 @@ namespace ProcessModel
             }
             catch
             {
-                dr.Close();
+                if (dr != null)
+                {
+                    dr.Close();
+                }
             }
             return list;
         }

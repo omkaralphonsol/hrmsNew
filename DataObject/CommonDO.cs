@@ -21,6 +21,7 @@ namespace DataObject
     public class DropDownData
     {
         public int Id { get; set; }
+        public string Value { get; set; }
         public string Text { get; set; }
         public int AvailabilityId { get; set; }
         public string ComponentType { get; set; }

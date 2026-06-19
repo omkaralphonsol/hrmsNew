@@ -501,59 +501,39 @@ namespace ProcessModel
             SalarySlipDO slip = null;
             try
             {
-                using (MySqlConnection con = new MySqlConnection(MySqlconnection))
-                using (MySqlCommand cmd = new MySqlCommand(@"
-                    SELECT
-                        user_id,
-                        employeecode,
-                        username,
-                        month,
-                        year,
-                        designation_name,
-                        days_paid,
-                        days_present,
-                        days_absent,
-                        basic_salary,
-                        house_rent_allowance,
-                        special_allowance,
-                        leave_travel_allowance,
-                        professional_tax,
-                        total_earnings,
-                        total_deductions,
-                        net_pay
-                    FROM salary_slip_details
-                    WHERE user_id = @p_user_id
-                    ORDER BY inserted_date DESC
-                    LIMIT 1;", con))
+                var spParams = new List<MySqlParameter>
                 {
-                    cmd.Parameters.AddWithValue("@p_user_id", userId);
-                    con.Open();
+                    DataClass.GetParameter("@p_user_id", userId)
+                };
 
-                    using (MySqlDataReader dr = cmd.ExecuteReader())
+                // Uses DB SP only: first result set must return latest active salary slip row.
+                using (MySqlDataReader dr = DataClass.GetDataReaderFromSpWithParam(
+                    spParams,
+                    DBName,
+                    "sp_get_latest_active_salary_with_components"))
+                {
+                    if (dr != null && dr.Read())
                     {
-                        if (dr.Read())
+                        slip = new SalarySlipDO
                         {
-                            slip = new SalarySlipDO
-                            {
-                                UserId = dr["user_id"] != DBNull.Value ? Convert.ToInt32(dr["user_id"]) : 0,
-                                employeecode = dr["employeecode"] != DBNull.Value ? Convert.ToInt32(dr["employeecode"]) : 0,
-                                Username = dr["username"] != DBNull.Value ? dr["username"].ToString() : string.Empty,
-                                Month = dr["month"] != DBNull.Value ? dr["month"].ToString() : string.Empty,
-                                Year = dr["year"] != DBNull.Value ? Convert.ToInt32(dr["year"]) : 0,
-                                DesignationName = dr["designation_name"] != DBNull.Value ? dr["designation_name"].ToString() : string.Empty,
-                                DaysPaid = dr["days_paid"] != DBNull.Value ? Convert.ToInt32(dr["days_paid"]) : 0,
-                                DaysPresent = dr["days_present"] != DBNull.Value ? Convert.ToInt32(dr["days_present"]) : 0,
-                                DaysAbsent = dr["days_absent"] != DBNull.Value ? Convert.ToInt32(dr["days_absent"]) : 0,
-                                BasicSalary = dr["basic_salary"] != DBNull.Value ? Convert.ToDecimal(dr["basic_salary"]) : 0,
-                                HouseRentAllowance = dr["house_rent_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["house_rent_allowance"]) : 0,
-                                SpecialAllowance = dr["special_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["special_allowance"]) : 0,
-                                LeaveTravelAllowance = dr["leave_travel_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["leave_travel_allowance"]) : 0,
-                                ProfessionalTax = dr["professional_tax"] != DBNull.Value ? Convert.ToDecimal(dr["professional_tax"]) : 0,
-                                TotalEarnings = dr["total_earnings"] != DBNull.Value ? Convert.ToDecimal(dr["total_earnings"]) : 0,
-                                TotalDeductions = dr["total_deductions"] != DBNull.Value ? Convert.ToDecimal(dr["total_deductions"]) : 0,
-                                NetPay = dr["net_pay"] != DBNull.Value ? Convert.ToDecimal(dr["net_pay"]) : 0
-                            };
-                        }
+                            UserId = dr["user_id"] != DBNull.Value ? Convert.ToInt32(dr["user_id"]) : 0,
+                            employeecode = dr["employeecode"] != DBNull.Value ? Convert.ToInt32(dr["employeecode"]) : 0,
+                            Username = dr["username"] != DBNull.Value ? dr["username"].ToString() : string.Empty,
+                            Month = dr["month"] != DBNull.Value ? dr["month"].ToString() : string.Empty,
+                            Year = dr["year"] != DBNull.Value ? Convert.ToInt32(dr["year"]) : 0,
+                            DesignationName = dr["designation_name"] != DBNull.Value ? dr["designation_name"].ToString() : string.Empty,
+                            DaysPaid = dr["days_paid"] != DBNull.Value ? Convert.ToInt32(dr["days_paid"]) : 0,
+                            DaysPresent = dr["days_present"] != DBNull.Value ? Convert.ToInt32(dr["days_present"]) : 0,
+                            DaysAbsent = dr["days_absent"] != DBNull.Value ? Convert.ToInt32(dr["days_absent"]) : 0,
+                            BasicSalary = dr["basic_salary"] != DBNull.Value ? Convert.ToDecimal(dr["basic_salary"]) : 0,
+                            HouseRentAllowance = dr["house_rent_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["house_rent_allowance"]) : 0,
+                            SpecialAllowance = dr["special_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["special_allowance"]) : 0,
+                            LeaveTravelAllowance = dr["leave_travel_allowance"] != DBNull.Value ? Convert.ToDecimal(dr["leave_travel_allowance"]) : 0,
+                            ProfessionalTax = dr["professional_tax"] != DBNull.Value ? Convert.ToDecimal(dr["professional_tax"]) : 0,
+                            TotalEarnings = dr["total_earnings"] != DBNull.Value ? Convert.ToDecimal(dr["total_earnings"]) : 0,
+                            TotalDeductions = dr["total_deductions"] != DBNull.Value ? Convert.ToDecimal(dr["total_deductions"]) : 0,
+                            NetPay = dr["net_pay"] != DBNull.Value ? Convert.ToDecimal(dr["net_pay"]) : 0
+                        };
                     }
                 }
             }
@@ -789,37 +769,97 @@ namespace ProcessModel
             List<SalaryComponent> components = new List<SalaryComponent>();
             try
             {
-                using (MySqlConnection con = new MySqlConnection(MySqlconnection))
-                using (MySqlCommand cmd = new MySqlCommand("sp_get_remuneration_components", con))
+                var spParams = new List<MySqlParameter>
                 {
-                    cmd.CommandType = CommandType.StoredProcedure;
-                    cmd.Parameters.AddWithValue("@p_employee_id", employeeId);
-                    cmd.Parameters.AddWithValue("@p_month", month);
-                    cmd.Parameters.AddWithValue("@p_year", year);
+                    DataClass.GetParameter("@p_user_id", employeeId)
+                };
 
-                    con.Open();
-                    using (MySqlDataReader dr = cmd.ExecuteReader())
+                // Uses DB SP only: result set 1 = salary slip, result set 2 = components.
+                using (MySqlDataReader dr = DataClass.GetDataReaderFromSpWithParam(
+                    spParams,
+                    DBName,
+                    "sp_get_latest_active_salary_with_components"))
+                {
+                    if (dr != null)
                     {
-                        while (dr.Read())
+                        // Move to result set 2 (components)
+                        if (dr.NextResult())
                         {
-                            string componentName = dr["component_name"] != DBNull.Value
-                                ? dr["component_name"].ToString()
-                                : string.Empty;
-                            decimal amount = dr["amount"] != DBNull.Value
-                                ? Convert.ToDecimal(dr["amount"])
-                                : 0;
-
-                            string componentType = dr["component_type"] != DBNull.Value
-                                ? Convert.ToString(dr["component_type"])
-                                : string.Empty;
-                            bool isDeduction = string.Equals(componentType, "DEDUCTION", StringComparison.OrdinalIgnoreCase);
-
-                            components.Add(new SalaryComponent
+                            while (dr.Read())
                             {
-                                ComponentName = componentName,
-                                Amount = amount,
-                                IsDeduction = isDeduction
-                            });
+                                string componentName = dr["componentname"] != DBNull.Value
+                                    ? Convert.ToString(dr["componentname"])
+                                    : string.Empty;
+                                decimal amount = dr["amount"] != DBNull.Value
+                                    ? Convert.ToDecimal(dr["amount"])
+                                    : 0;
+
+                                bool isDeduction = false;
+                                if (HasColumn(dr, "component_type") && dr["component_type"] != DBNull.Value)
+                                {
+                                    string componentType = Convert.ToString(dr["component_type"]);
+                                    isDeduction = string.Equals(componentType, "DEDUCTION", StringComparison.OrdinalIgnoreCase);
+                                }
+
+                                components.Add(new SalaryComponent
+                                {
+                                    ComponentName = componentName,
+                                    Amount = amount,
+                                    IsDeduction = isDeduction
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: if SP second result set is not returned by runtime provider,
+                // fetch components from existing component SP using active month/year.
+                if (components.Count == 0 && month > 0 && year > 0)
+                {
+                    using (MySqlConnection con = new MySqlConnection(MySqlconnection))
+                    using (MySqlCommand cmd = new MySqlCommand("sp_get_remuneration_components", con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@p_employee_id", employeeId);
+                        cmd.Parameters.AddWithValue("@p_month", month);
+                        cmd.Parameters.AddWithValue("@p_year", year);
+
+                        con.Open();
+                        using (MySqlDataReader dr2 = cmd.ExecuteReader())
+                        {
+                            while (dr2.Read())
+                            {
+                                string componentName = string.Empty;
+                                if (HasColumn(dr2, "component_name") && dr2["component_name"] != DBNull.Value)
+                                {
+                                    componentName = Convert.ToString(dr2["component_name"]);
+                                }
+                                else if (HasColumn(dr2, "componentname") && dr2["componentname"] != DBNull.Value)
+                                {
+                                    componentName = Convert.ToString(dr2["componentname"]);
+                                }
+
+                                decimal amount = dr2["amount"] != DBNull.Value
+                                    ? Convert.ToDecimal(dr2["amount"])
+                                    : 0;
+
+                                string componentType = string.Empty;
+                                if (HasColumn(dr2, "component_type") && dr2["component_type"] != DBNull.Value)
+                                {
+                                    componentType = Convert.ToString(dr2["component_type"]);
+                                }
+                                bool isDeduction = string.Equals(componentType, "DEDUCTION", StringComparison.OrdinalIgnoreCase);
+
+                                if (!string.IsNullOrWhiteSpace(componentName))
+                                {
+                                    components.Add(new SalaryComponent
+                                    {
+                                        ComponentName = componentName,
+                                        Amount = amount,
+                                        IsDeduction = isDeduction
+                                    });
+                                }
+                            }
                         }
                     }
                 }

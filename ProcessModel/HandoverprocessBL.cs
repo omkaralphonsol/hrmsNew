@@ -114,24 +114,67 @@ namespace ProcessModel
             {
                 listdata.Add(new ResignationDO
                 {
-                    UserId = dr["user_id"] != DBNull.Value ? Convert.ToInt32(dr["user_id"]) : 0,
-                    EmployeeResignationId = dr["employee_resignation_id"] != DBNull.Value ? Convert.ToInt32(dr["employee_resignation_id"]) : 0,
-                    resignation_date = dr["resignation_date"] != DBNull.Value ? Convert.ToDateTime(dr["resignation_date"]) : DateTime.MinValue,
-                    notice_period_days = dr["notice_period_days"] != DBNull.Value ? Convert.ToInt32(dr["notice_period_days"]) : 0,
-                    last_working_date = dr["last_working_date"] != DBNull.Value ? Convert.ToDateTime(dr["last_working_date"]) : DateTime.MinValue,
-                    reason = dr["reason"] != DBNull.Value ? Convert.ToString(dr["reason"]) : string.Empty,
-                    hr_status = dr["status"] != DBNull.Value ? Convert.ToString(dr["status"]) : "Pending",
-                    remarks = dr["remarks"] != DBNull.Value ? Convert.ToString(dr["remarks"]) : string.Empty,
-                    action_date = dr["action_date"] != DBNull.Value ? (DateTime?)Convert.ToDateTime(dr["action_date"]) : null,
-                    reporting_manager = dr["reporting_manager"] != DBNull.Value ? Convert.ToInt32(dr["reporting_manager"]) : 0,
-                    EmployeeName = dr["emp_name"] != DBNull.Value ? Convert.ToString(dr["emp_name"]) : string.Empty,
-                    EmployeeEmail = dr["email_id"] != DBNull.Value ? Convert.ToString(dr["email_id"]) : string.Empty,
-                    reporting_manager_name = dr["reporting_manager_name"] != DBNull.Value ? Convert.ToString(dr["reporting_manager_name"]) : string.Empty,
-                    project_status = dr["project_status"] != DBNull.Value ? Convert.ToString(dr["project_status"]) : string.Empty
+                    UserId = GetIntSafe(dr, "user_id"),
+                    EmployeeResignationId = GetIntSafe(dr, "employee_resignation_id"),
+                    resignation_date = GetDateSafe(dr, "resignation_date"),
+                    notice_period_days = GetIntSafe(dr, "notice_period_days"),
+                    last_working_date = GetDateSafe(dr, "last_working_date"),
+                    reason = GetStringSafe(dr, "reason"),
+                    hr_status = string.IsNullOrWhiteSpace(GetStringSafe(dr, "status")) ? "Pending" : GetStringSafe(dr, "status"),
+                    remarks = GetStringSafe(dr, "remarks"),
+                    action_date = GetNullableDateSafe(dr, "action_date"),
+                    reporting_manager = GetIntSafe(dr, "reporting_manager"),
+                    EmployeeName = GetStringSafe(dr, "emp_name"),
+                    EmployeeEmail = GetStringSafe(dr, "email_id"),
+                    reporting_manager_name = GetStringSafe(dr, "reporting_manager_name"),
+                    project_status = GetStringSafe(dr, "project_status"),
+                    pending_days = GetIntSafe(dr, "pending_days"),
+                    pending_days_display = GetStringSafe(dr, "pending_days_display"),
+                    pending_hours = GetIntSafe(dr, "pending_hours"),
+                    approval_hours = GetIntSafe(dr, "approval_hours"),
+                    approval_days = GetIntSafe(dr, "approval_days"),
+                    status_updated_flag = GetIntSafe(dr, "status_updated_flag"),
+                    authority_status = GetStringSafe(dr, "authority_status")
                 });
             }
 
             return listdata;
+        }
+
+        private int GetOrdinalIgnoreCase(IDataRecord dr, string col)
+        {
+            for (int i = 0; i < dr.FieldCount; i++)
+            {
+                if (string.Equals(dr.GetName(i), col, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private string GetStringSafe(IDataRecord dr, string col)
+        {
+            int i = GetOrdinalIgnoreCase(dr, col);
+            return (i < 0 || dr.IsDBNull(i)) ? string.Empty : Convert.ToString(dr.GetValue(i));
+        }
+
+        private int GetIntSafe(IDataRecord dr, string col)
+        {
+            int i = GetOrdinalIgnoreCase(dr, col);
+            return (i < 0 || dr.IsDBNull(i)) ? 0 : Convert.ToInt32(dr.GetValue(i));
+        }
+
+        private DateTime GetDateSafe(IDataRecord dr, string col)
+        {
+            int i = GetOrdinalIgnoreCase(dr, col);
+            return (i < 0 || dr.IsDBNull(i)) ? DateTime.MinValue : Convert.ToDateTime(dr.GetValue(i));
+        }
+
+        private DateTime? GetNullableDateSafe(IDataRecord dr, string col)
+        {
+            int i = GetOrdinalIgnoreCase(dr, col);
+            return (i < 0 || dr.IsDBNull(i)) ? (DateTime?)null : Convert.ToDateTime(dr.GetValue(i));
         }
 
         private string NormalizeMySqlConnectionString(string raw)
@@ -419,6 +462,177 @@ namespace ProcessModel
                     "SP_UpdateNoticeStatusByUserId"
                 )
             );
+        }
+
+        public ResignationActionResponseDO UpdateResignationActionBySp(int resignationId, string hrAction, string hrRemarks, DateTime? lastWorkingDate, int? extendedNoticeDays, int updatedBy)
+        {
+            var response = new ResignationActionResponseDO
+            {
+                Success = false,
+                ResponseMsg = "Unable to update resignation action."
+            };
+
+            if (resignationId <= 0 || string.IsNullOrWhiteSpace(Sqlconnection))
+            {
+                response.ResponseMsg = "Invalid resignation request.";
+                return response;
+            }
+
+            // Try candidate SP names and parameter sets. This avoids hard-coding one DB variant.
+            string[] spNames = new[]
+            {
+                "SP_UpdateResignationAction",
+                "Sp_UpdateResignationAction",
+                "SP_SaveResignationAction",
+                "Sp_SaveResignationAction"
+            };
+
+            string lastError = string.Empty;
+            foreach (var sp in spNames)
+            {
+                if (TryExecuteResignationActionSp(sp, resignationId, hrAction, hrRemarks, lastWorkingDate, extendedNoticeDays, updatedBy, out response, out lastError))
+                {
+                    return response;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(lastError))
+            {
+                response.ResponseMsg = "Unable to update resignation action. " + lastError;
+            }
+
+            return response;
+        }
+
+        private bool TryExecuteResignationActionSp(string spName, int resignationId, string hrAction, string hrRemarks, DateTime? lastWorkingDate, int? extendedNoticeDays, int updatedBy, out ResignationActionResponseDO response, out string errorMessage)
+        {
+            response = new ResignationActionResponseDO
+            {
+                Success = false,
+                ResponseMsg = "Unable to update resignation action."
+            };
+            errorMessage = string.Empty;
+
+            try
+            {
+                string normalized = NormalizeMySqlConnectionString(Sqlconnection);
+                using (MySqlConnection con = new MySqlConnection(normalized))
+                using (MySqlCommand cmd = new MySqlCommand(spName, con))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    AddResignationParams(cmd.Parameters, resignationId, hrAction, hrRemarks, lastWorkingDate, extendedNoticeDays, updatedBy);
+                    con.Open();
+
+                    using (var dr = cmd.ExecuteReader())
+                    {
+                        response = ReadResignationActionResponse(dr, true);
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception exMySql)
+            {
+                // Try SQL style as fallback for secondary connection variants.
+                try
+                {
+                    using (SqlConnection con = new SqlConnection(Sqlconnection))
+                    using (SqlCommand cmd = new SqlCommand(spName, con))
+                    {
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        AddResignationParams(cmd.Parameters, resignationId, hrAction, hrRemarks, lastWorkingDate, extendedNoticeDays, updatedBy);
+                        con.Open();
+                        using (var dr = cmd.ExecuteReader())
+                        {
+                            response = ReadResignationActionResponse(dr, false);
+                        }
+                    }
+                    return true;
+                }
+                catch (Exception exSql)
+                {
+                    errorMessage = string.Format(
+                        "SP: {0}; MySqlError: {1}; SqlError: {2}",
+                        spName,
+                        exMySql.Message,
+                        exSql.Message
+                    );
+                    return false;
+                }
+            }
+        }
+
+        private void AddResignationParams(MySqlParameterCollection p, int resignationId, string hrAction, string hrRemarks, DateTime? lastWorkingDate, int? extendedNoticeDays, int updatedBy)
+        {
+            p.AddWithValue("@p_employee_resignation_id", resignationId);
+            p.AddWithValue("@p_hr_action", hrAction ?? string.Empty);
+            p.AddWithValue("@p_hr_remarks", string.IsNullOrWhiteSpace(hrRemarks) ? (object)DBNull.Value : hrRemarks);
+            p.AddWithValue("@p_last_working_date", lastWorkingDate.HasValue ? (object)lastWorkingDate.Value : DBNull.Value);
+            p.AddWithValue("@p_extended_notice_days", extendedNoticeDays.HasValue ? (object)extendedNoticeDays.Value : DBNull.Value);
+            p.AddWithValue("@p_updated_by", updatedBy);
+        }
+
+        private void AddResignationParams(SqlParameterCollection p, int resignationId, string hrAction, string hrRemarks, DateTime? lastWorkingDate, int? extendedNoticeDays, int updatedBy)
+        {
+            p.AddWithValue("@p_employee_resignation_id", resignationId);
+            p.AddWithValue("@p_hr_action", hrAction ?? string.Empty);
+            p.AddWithValue("@p_hr_remarks", string.IsNullOrWhiteSpace(hrRemarks) ? (object)DBNull.Value : hrRemarks);
+            p.AddWithValue("@p_last_working_date", lastWorkingDate.HasValue ? (object)lastWorkingDate.Value : DBNull.Value);
+            p.AddWithValue("@p_extended_notice_days", extendedNoticeDays.HasValue ? (object)extendedNoticeDays.Value : DBNull.Value);
+            p.AddWithValue("@p_updated_by", updatedBy);
+        }
+
+        private ResignationActionResponseDO ReadResignationActionResponse(IDataReader dr, bool isSuccessFallback)
+        {
+            var response = new ResignationActionResponseDO
+            {
+                Success = isSuccessFallback,
+                ResponseMsg = isSuccessFallback ? "Resignation action updated successfully." : "Update failed."
+            };
+
+            try
+            {
+                if (dr.Read())
+                {
+                    string status = string.Empty;
+                    string message = string.Empty;
+
+                    for (int i = 0; i < dr.FieldCount; i++)
+                    {
+                        string name = dr.GetName(i);
+                        if (string.Equals(name, "Status", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(name, "Success", StringComparison.OrdinalIgnoreCase))
+                        {
+                            status = Convert.ToString(dr[i]);
+                        }
+
+                        if (string.Equals(name, "Remarks", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(name, "ResponseMsg", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(name, "Message", StringComparison.OrdinalIgnoreCase))
+                        {
+                            message = Convert.ToString(dr[i]);
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(status))
+                    {
+                        response.Success = status.Equals("Success", StringComparison.OrdinalIgnoreCase) ||
+                                           status.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                                           status.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(message))
+                    {
+                        response.ResponseMsg = message;
+                    }
+                }
+            }
+            catch
+            {
+                // keep fallback defaults
+            }
+
+            return response;
         }
 
 

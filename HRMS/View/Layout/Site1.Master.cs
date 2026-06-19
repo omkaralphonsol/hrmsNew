@@ -21,6 +21,7 @@ namespace Lean.View.Layout
             if (name.Equals("Employee List", StringComparison.OrdinalIgnoreCase)) return 2;
             if (name.Equals("Remuneration Form", StringComparison.OrdinalIgnoreCase)) return 3;
             if (name.Equals("Document", StringComparison.OrdinalIgnoreCase)) return 4;
+            if (name.Equals("Employee Leave List", StringComparison.OrdinalIgnoreCase)) return 5;
             return 999;
         }
         private static int GetMainMenuOrder(string menuName)
@@ -30,6 +31,112 @@ namespace Lean.View.Layout
             if (name.Equals("Employee Onboarding", StringComparison.OrdinalIgnoreCase)) return 2;
             if (name.Equals("Salary Slip", StringComparison.OrdinalIgnoreCase)) return 3;
             return 999;
+        }
+
+        private static bool IsMenuName(string value, string expected)
+        {
+            return string.Equals((value ?? string.Empty).Trim(), expected, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void MoveRemunerationFormToOnboarding(List<MenuData> menuDataList)
+        {
+            if (menuDataList == null)
+            {
+                return;
+            }
+
+            MenuData salarySlipMenu = menuDataList.FirstOrDefault(x => IsMenuName(x.Menu, "Salary Slip"));
+            MenuData onboardingMenu = menuDataList.FirstOrDefault(x => IsMenuName(x.Menu, "Employee Onboarding"));
+
+            if (salarySlipMenu == null || salarySlipMenu.SubMenus == null)
+            {
+                return;
+            }
+
+            List<SubMenuData> remunerationForms = salarySlipMenu.SubMenus
+                .Where(s => IsMenuName(s.SubMenu, "Remuneration Form"))
+                .ToList();
+
+            if (remunerationForms.Count == 0)
+            {
+                return;
+            }
+
+            salarySlipMenu.SubMenus = salarySlipMenu.SubMenus
+                .Where(s => !IsMenuName(s.SubMenu, "Remuneration Form"))
+                .ToList();
+
+            if (onboardingMenu == null)
+            {
+                return;
+            }
+
+            if (onboardingMenu.SubMenus == null)
+            {
+                onboardingMenu.SubMenus = new List<SubMenuData>();
+            }
+
+            bool alreadyExistsInOnboarding = onboardingMenu.SubMenus
+                .Any(s => IsMenuName(s.SubMenu, "Remuneration Form"));
+
+            if (!alreadyExistsInOnboarding)
+            {
+                onboardingMenu.SubMenus.Add(remunerationForms[0]);
+            }
+        }
+
+        private static void EnsureOnboardingMenu(List<MenuData> menuDataList)
+        {
+            if (menuDataList == null)
+            {
+                return;
+            }
+
+            MenuData onboardingMenu = menuDataList.FirstOrDefault(x => IsMenuName(x.Menu, "Employee Onboarding"));
+            if (onboardingMenu == null)
+            {
+                onboardingMenu = new MenuData
+                {
+                    Menu = "Employee Onboarding",
+                    MenuLink = string.Empty,
+                    Icon = "bx bx-user-plus",
+                    SubMenus = new List<SubMenuData>()
+                };
+                menuDataList.Add(onboardingMenu);
+            }
+
+            if (onboardingMenu.SubMenus == null)
+            {
+                onboardingMenu.SubMenus = new List<SubMenuData>();
+            }
+
+            Action<string, string> upsertSubMenu = (name, link) =>
+            {
+                SubMenuData existing = onboardingMenu.SubMenus
+                    .FirstOrDefault(s => IsMenuName(s.SubMenu, name));
+
+                if (existing == null)
+                {
+                    onboardingMenu.SubMenus.Add(new SubMenuData
+                    {
+                        SubMenu = name,
+                        SubMenuLink = link
+                    });
+                    return;
+                }
+
+                existing.SubMenu = name;
+                if (!string.IsNullOrWhiteSpace(link))
+                {
+                    existing.SubMenuLink = link;
+                }
+            };
+
+            upsertSubMenu("Employee Registration", "/View/Modules/EmployeeRegistration.aspx");
+            upsertSubMenu("Employee List", "/View/Modules/EmployeeList.aspx");
+            upsertSubMenu("Remuneration Form", "/View/Modules/Remunerationform.aspx");
+            upsertSubMenu("Document", "/View/Modules/useruploaddocuments.aspx");
+            upsertSubMenu("Employee Leave List", "/View/Modules/EmployeeLeaveList.aspx");
         }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -50,7 +157,10 @@ namespace Lean.View.Layout
                     UserDetailsBL sessionUserBAL = new UserDetailsBL();
                     int accessStatus = sessionUserBAL.Getpage(sessionUserId, lastSegment);
                     bool skipAccessCheck =
-                        string.Equals(lastSegment, "LeaveConfiguration.aspx", StringComparison.OrdinalIgnoreCase);
+                        string.Equals(lastSegment, "LeaveConfiguration.aspx", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(lastSegment, "EmployeeRegistration.aspx", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(lastSegment, "EmployeeList.aspx", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(lastSegment, "AddEmployee.aspx", StringComparison.OrdinalIgnoreCase);
 
                     //bool isAddProjectViewMode = url.Contains("Addproject") && url.Contains("mode=view");
                     int roleId = Convert.ToInt32(Session["roleid"]);
@@ -171,6 +281,9 @@ namespace Lean.View.Layout
                     .OrderBy(x => GetMainMenuOrder(x.Menu))
                     .ThenBy(x => (x.Menu ?? string.Empty).Trim())
                     .ToList();
+
+                MoveRemunerationFormToOnboarding(menuDataList);
+                EnsureOnboardingMenu(menuDataList);
 
                 foreach (var menu in menuDataList)
                 {

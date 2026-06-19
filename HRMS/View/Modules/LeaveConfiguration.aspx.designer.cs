@@ -8,5 +8,14 @@ namespace HRMS.View.Modules
 {
     public partial class LeaveConfiguration
     {
+        /// <summary>
+        /// gvInlineConfig control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.GridView gvInlineConfig;
+
+        /// <summary>
+        /// lblMsg control.
+        /// </summary>
+        protected global::System.Web.UI.WebControls.Label lblMsg;
     }
 }
